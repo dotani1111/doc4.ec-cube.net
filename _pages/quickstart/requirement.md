@@ -15,7 +15,7 @@ permalink: quickstart/requirement
 |WebServer|Apache |2.4.x <br> (mod_rewrite / mod_ssl 必須) |
 |PHP |PHP |8.1 〜 8.3 |
 |Database|PostgreSQL|12.x 〜 16.x <br> (pg_settingsテーブルへの参照権限 必須) |
-|Database|MySQL| 8.0<br> (InnoDBエンジン 必須) |
+|Database|MySQL| 8.0 〜 8.4 <br> (InnoDBエンジン 必須) |
 |Database|SQLite(開発用途向け) |3.x |
 
 ## 4.2
