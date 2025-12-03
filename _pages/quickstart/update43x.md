@@ -1,9 +1,9 @@
 ---
 layout: single
-title: 4.2から4.3への本体バージョンアップ
+title: 4.3 本体バージョンアップ
 keywords: howto update
 tags: [quickstart, getting_started]
-permalink: update43
+permalink: update43x
 summary : EC-CUBE4.2から4.3への本体バージョンアップ手順について記載します。
 ---
 
