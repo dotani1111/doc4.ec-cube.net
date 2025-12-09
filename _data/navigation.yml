@@ -89,6 +89,9 @@ docs:
       - title: 4.3本体バージョンアップ
         url: /update43x
         output: web, pdf
+      - title: 4.2から4.3本体バージョンアップ
+        url: /update423_43x
+        output: web, pdf
       - title: 4.2本体バージョンアップ
         url: /update42x
         output: web, pdf
