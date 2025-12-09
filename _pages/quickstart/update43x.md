@@ -3,7 +3,7 @@ layout: single
 title: 4.3 本体バージョンアップ
 keywords: howto update
 tags: [quickstart, getting_started]
-permalink: update42x
+permalink: update43x
 summary : 4.3.x の本体バージョンアップ手順について記載します。
 ---
 
