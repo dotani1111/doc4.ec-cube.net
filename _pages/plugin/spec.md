@@ -54,7 +54,10 @@ app/Plugin/SamplePlugin/
 設定項目は以下のとおりです。
 
 - name: パッケージ名
-    - `"ec-cube/[プラグインコード]"` を記述します。
+    - EC-CUBE 4.0系
+        - `"ec-cube/[大文字小文字を区別するプラグインコード]"` を記述します。
+    - EC-CUBE 4.1系以降
+        - `"ec-cube/[すべて小文字のプラグインコード]"` を記述します。
 - version: バージョン
     - プラグインのバージョン番号です。
     - phpのバージョンフォーマットに合わせてください。
@@ -63,23 +66,27 @@ app/Plugin/SamplePlugin/
     - `"eccube-plugin"` にします。
 - require: 依存パッケージ
     - プラグインが利用するパッケージがあれば追記します。
-    - `"ec-cube/plugin-installer": "~0.0.6"` は常に記述してください。
-- extra: 付属情報
+    - EC-CUBE 4.0系
+        - `"ec-cube/plugin-installer": "~0.0.6"` は常に記述してください。
+    - EC-CUBE 4.1系
+        - `"ec-cube/plugin-installer": 	"~0.0.6 || ^2.0"` は常に記述してください。
+    - EC-CUBE 4.2系以降
+        - `"ec-cube/plugin-installer": 	"^2.0"` は常に記述してください。
     - `"code": "[プラグインコード]"` を記述してください。
 
 記載例は以下の通りです。
 
 ```yaml
 {
-    "name": "ec-cube/ProductReview",
-    "version": "1.0.0",
-    "description": "商品レビュープラグイン",
+    "name": "ec-cube/productreview42"
+    "version": "4.3.0",
+    "description": "商品レビュー管理プラグイン",
     "type": "eccube-plugin",
     "require": {
-        "ec-cube/plugin-installer": "~0.0.6"
+        "ec-cube/plugin-installer": "^2.0"
     },
     "extra": {
-        "code": "ProductReview"
+        "code": "ProductReview42"
     }
 }
 ```
@@ -91,7 +98,7 @@ app/Plugin/SamplePlugin/
 yamlフォーマットの他に、phpやxmlでも記述可能です。
 
 コンテナの定義については、Symfonyの公式ドキュメントを参照してください。
-https://symfony.com/doc/current/service_container.html
+[https://symfony.com/doc/current/service_container.html](https://symfony.com/doc/current/service_container.html)
 
 ### その他の設定ファイル
 その他のプラグイン独自の設定ファイルをプラグイン内に含めることは可能ですが、プラグインインストール後に生成または変更される設定ファイルは `app/PluginData` ディレクトリ以下に設置するようにしてください。プラグインのディレクトリ内にこれらのファイルを配置した場合、**プラグインのアップデートや再インストールの操作によって設定ファイルが失われます。**
