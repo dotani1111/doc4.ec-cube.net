@@ -154,7 +154,7 @@ $ COPYFILE_DISABLE=1 tar --exclude  ".git" --exclude ".DS_Store" -cvzf ../[Plugi
 - フックポイントの非推奨化
     - `eccube.event.admin.request`など、リクエストの実行前後に動作するフックポイントは非推奨となりました。
     - twigファイルにパーツを差し込むために利用している場合は、スニペットを用意し、ユーザに貼り付けてもらう方式になります。
-    - https://github.com/EC-CUBE/ec-cube/issues/2440
+    - Responseフックポイントは、レンダリング後のHTMLレスポンスに対して id や class を基準に介入する方式で、プラグイン間の競合やデザイン自由度の低下といった課題があったため非推奨となりました。[#2440](https://github.com/EC-CUBE/ec-cube/issues/2440)
 - ファイル設置のみのプラグインはロードされない
     - dtb_pluginにレコードが登録されている必要があります。
 
