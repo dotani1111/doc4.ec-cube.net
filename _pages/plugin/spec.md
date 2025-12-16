@@ -66,9 +66,7 @@ app/Plugin/SamplePlugin/
     - `"eccube-plugin"` にします。
 - require: 依存パッケージ
     - プラグインが利用するパッケージがあれば追記します。
-    - EC-CUBE 4.0系
-        - `"ec-cube/plugin-installer": "~0.0.6"` は常に記述してください。
-    - EC-CUBE 4.1系
+    - EC-CUBE 4.0系/4.1系
         - `"ec-cube/plugin-installer": 	"~0.0.6 || ^2.0"` は常に記述してください。
     - EC-CUBE 4.2系以降
         - `"ec-cube/plugin-installer": 	"^2.0"` は常に記述してください。
