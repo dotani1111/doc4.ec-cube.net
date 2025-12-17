@@ -160,7 +160,9 @@ $ COPYFILE_DISABLE=1 tar --exclude  ".git" --exclude ".DS_Store" -cvzf ../[Plugi
 
 ## スニペットの書き方
 
-スニペットとは、既存のTwigテンプレートに後付けで挿入されるTwigの断片です。EC-CUBE4では、画面拡張を行う際にTwigテンプレートを直接改修するのではなく、プラグイン側から`TemplateEvent`を利用してパーツを埋め込む方法が推奨されています。この仕組みを利用することで、EC-CUBE本体の改修を避けられる・EC-CUBEのアップデート影響を最小限にできる・プラグインとして安全に機能追加できるといったメリットがあります。
+スニペットとは、既存のTwigテンプレートに後付けで挿入されるTwigの断片です。  
+EC-CUBE4では、画面拡張を行う際にTwigテンプレートを直接改修するのではなく、プラグイン側から`TemplateEvent`を利用してパーツを埋め込む方法が推奨されています。  
+この仕組みを利用することで、EC-CUBE本体の改修を避けられる・EC-CUBEのアップデート影響を最小限にできる・プラグインとして安全に機能追加できるといったメリットがあります。
 
 ### addSnippet メソッド
 `TemplateEvent`に用意されている`addSnippet()`を利用することで、指定したTwigファイルをスニペットとして登録できます。
@@ -227,52 +229,53 @@ public function ($snippet, $include = true)
 ここでは`Shopping/index.twig`が描画される際に、`@SamplePayment42/credit.twig`をスニペットとして追加しています。
 
 - [sample-payment-plugin/Resource/template/credit.twig](https://github.com/EC-CUBE/sample-payment-plugin/blob/4.2/Resource/template/credit.twig)
-```
-<script>
-$(function () {
-    $(".ec-orderPayment").last().after($("#credit").detach());
-});
-</script>
 
+```twig
+<script>
+ $(function () {
+     $(".ec-orderPayment").last().after($("#credit").detach());
+ });
+</script>
+{% raw %}
 {% if Order.Payment.getMethodClass == 'Plugin\\SamplePayment42\\Service\\Method\\CreditCard' %}
     <div id="credit" class="ec-orderPaymentCard">
         <div class="ec-rectHeading">
-            <h2>カード（暫定実装）</h2>
+            <h2>カード(暫定実装)</h2>
         </div>
         <div class="ec-input">
-            {# JS で取得したトークンを hidden でサーバーへ送信する #}
+            {# jsで取得したトークンをhiddenでサーバサイドへsubmitする. #}
             {{ form_widget(form.sample_payment_token) }}
 
-            {# カード番号はサーバーへ送信しないため name 属性を付与しない #}
+            {# カード番号をサーバサイドへPOSTしないよう, name属性は出力しない #}
             <input type="text" id="shopping_order_sample_payment_card_no">
         </div>
     </div>
-
     <script>
-    $(function () {
-        $('#shopping-form button[type="submit"]').on('click', function () {
-            var card_no = $('#shopping_order_sample_payment_card_no').val();
-            if (card_no === '') {
-                alert('カード番号が入力されていません');
-                return false;
-            }
+     $(function () {
+            $('#shopping-form > div > div.ec-orderRole__summary > div > div.ec-totalBox__btn > button').on('click', function (e) {
+                // トークン取得処理
+                var card_no = $('#shopping_order_sample_payment_card_no').val();
+                if (card_no == '') {
+                    alert('カード番号が入力されていません');
+                    return false;
+                }
+                // サーバ通信してトークンを取得
+                var token = 'aaabbbccc123456';
 
-            // トークン取得処理（サンプル）
-            var token = 'aaabbbccc123456';
-
-            // hidden にトークンをセット
-            $('#shopping_order_sample_payment_token').val(token);
+                // hiddenにトークンをセット
+                $('#shopping_order_sample_payment_token').val(token);
+            });
         });
-    });
     </script>
 {% else %}
-    {{ form_widget(form.sample_payment_token, { type: 'hidden', id: 'credit' }) }}
+    {{ form_widget(form.sample_payment_token, { type: 'hidden', 'id': 'credit' }) }}
 {% endif %}
+{% endraw %}
 ```
-`@SamplePayment42/credit.twig` は、プラグイン内に配置されたTwigファイルを指します。
-`sample-payment-plugin/Resource/template/credit.twig` に記述し、プラグイン内に配置したTwigを`addSnippet()`で登録するだけで、  
-`Shopping/index.twig` などの決められた挿入位置に画面要素を追加できます。
-このようにEC-CUBE4では、`TemplateEvent`が提供する`addSnippet()` を利用することで、JavaScriptと組み合わせた画面制御を、Twigテンプレートを直接改修せずに実現できます。
+
+`@SamplePayment42/credit.twig` は、プラグイン内に配置されたTwigファイルを指します。  
+`sample-payment-plugin/Resource/template/credit.twig` に記述し、プラグイン内に配置したTwigを`addSnippet()`で登録するだけで、`Shopping/index.twig` などの決められた挿入位置に画面要素を追加できます。  
+このようにEC-CUBE4では、`TemplateEvent`が提供する`addSnippet()` を利用することで、JavaScriptと組み合わせた画面制御をTwigテンプレートを直接改修せずに実現できます。
 
 
 ## プラグインサンプル
