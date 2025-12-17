@@ -194,7 +194,7 @@ public function ($snippet, $include = true)
 - [sample-payment-plugin/SamplePaymentEvent.php](https://github.com/EC-CUBE/sample-payment-plugin/blob/d025ecde6042c0e935125fe48cf59ae5af570b25/SamplePaymentEvent.php)
 
 ```php
-/**
+    /**
      * リッスンしたいサブスクライバのイベント名の配列を返します。
      * 配列のキーはイベント名、値は以下のどれかをしてします。
      * - 呼び出すメソッド名
