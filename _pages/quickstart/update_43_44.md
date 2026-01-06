@@ -4,14 +4,14 @@ title: 4.3から4.4へのマイグレーション
 keywords: howto update
 tags: [quickstart, getting_started]
 permalink: update-43-44
-summary : EC-CUBE4.3から4.4へのマイグレーションについて記載します。
+summary : EC-CUBE 4.3から4.4へのマイグレーションについて記載します。
 ---
 
 # 4.3から4.4へのマイグレーション
 
 EC-CUBE 4.3から4.4へのマイグレーションを解説します。
 
-EC-CUBE本体および一部公式プラグインをEC-CUBE 4.4対応し、コードの移植が必要な箇所をまとめたものです。
+EC-CUBE本体および一部公式プラグインをEC-CUBE 4.4に対応し、コードの移植が必要な箇所をまとめたものです。
 
 ## 主な変更点
 
@@ -217,10 +217,13 @@ EC-CUBE 4.4では、PHPのシステム要件は **8.2〜8.5** となります。
 ### null許容型の明示
 
 エラー例
+
 ```
 Error: Typed property class@anonymous::$value must not be accessed before initialization
 ```
+
 コード例
+
 ```php
 // NG
 public string $value; // 初期化されていない
@@ -234,6 +237,7 @@ public ?string $value = null; // null許容型として明示
 型パラメータに関するエラーが発生する場合があります。
 
 引数の型が不一致のエラー例
+
 ```
 TypeError: class@anonymous(): Argument #1 ($value) must be of type string, null given, called in 
 
@@ -242,53 +246,56 @@ TypeError: class@anonymous(): Argument #1 ($value) must be of type string, null 
 このようなエラーが出た場合は、引数の型パラメータを正確に指定することで解消できます。
 
 コード例
-```
-// エラー
-// String型を期待しているのに、 nullを渡している。
-        $object = new class {
-            public function processString(string $value): string
-            {
-                return $value;
-            }
-        };
 
-        $result = $object->processString(null);
+```php
+// エラー
+// String型を期待しているのに、nullを渡している。
+$object = new class {
+    public function processString(string $value): string
+    {
+        return $value;
+    }
+};
+
+$result = $object->processString(null);
 // -> TypeError: class@anonymous(): Argument #1 ($value) must be of type string, null given, called in test.php on line x
 
 
 // 修正例1
 // 引数をStringに修正
-        
-        $object = new class {
-            public function processString(string $value): string
-            {
-                return $value;
-            }
-        };
+$object = new class {
+    public function processString(string $value): string
+    {
+        return $value;
+    }
+};
 
-        $result = $object->processString('test');
+$result = $object->processString('test');
 
 // 修正例2
 // null許容型に変更
-        $object = new class {
-            public function processString(?string $value): string // stringから?stringへ変更
-            {
-                return $value;
-            }
-        };
+$object = new class {
+    public function processString(?string $value): string // stringから?stringへ変更
+    {
+        return $value;
+    }
+};
 
-        $result = $object->processString(null);
+$result = $object->processString(null);
 ```
+
 ### 戻り値型の明示
 
 PHP 8.5では、メソッドの戻り値型を明示する必要がある場合があります。
 
 エラー例
+
 ```
 TypeError: class@anonymous::getInt(): Return value must be of type int, string returned
 ```
 
 コード例
+
 ```php
 // NG: 戻り値型が不一致の場合にエラーが発生
 class Sample {
@@ -328,6 +335,7 @@ EC-CUBE 4.3までは、メソッドの引数や戻り値の型をPHPDocの`@para
 4.3までの書き方では、PHPDocで型を指定していましたが、4.4では引数に直接型を指定します。
 
 コード例
+
 ```php
 // 4.3までの書き方（PHPDocアノテーション）
 class SampleService
@@ -357,6 +365,7 @@ class SampleService
 4.3までの書き方では、PHPDocで戻り値の型を指定していましたが、4.4では戻り値型を明示的に宣言します。
 
 コード例
+
 ```php
 // 4.3までの書き方（PHPDocアノテーション）
 class SampleService
@@ -385,6 +394,7 @@ class SampleService
 null許容型の場合も、型宣言で明示的に指定します。
 
 コード例
+
 ```php
 // 4.3までの書き方（PHPDocアノテーション）
 class SampleService
@@ -414,6 +424,7 @@ class SampleService
 PHP 8.0以降では、Union型を使用して複数の型を指定できます。
 
 コード例
+
 ```php
 // 4.3までの書き方（PHPDocアノテーション）
 class SampleService
@@ -467,7 +478,7 @@ Symfony 7.4では、ルーティングのAnnotations形式はサポートされ�
 ```php
 // 4.3までの書き方（Annotations）
 use Symfony\Component\Routing\Annotation\Route;
-use Symfony\Bridge\Twig\Attribute\Template;
+use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
 use Symfony\Component\HttpFoundation\Request;
 use Knp\Component\Pager\PaginatorInterface;
 
