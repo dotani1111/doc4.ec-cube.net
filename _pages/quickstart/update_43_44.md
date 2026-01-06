@@ -1,3 +1,12 @@
+---
+layout: single
+title: 4.3から4.4へのマイグレーション
+keywords: howto update
+tags: [quickstart, getting_started]
+permalink: update-43-44
+summary : EC-CUBE4.3から4.4へのマイグレーションについて記載します。
+---
+
 # 4.3から4.4へのマイグレーション
 
 EC-CUBE 4.3から4.4へのマイグレーションを解説します。
