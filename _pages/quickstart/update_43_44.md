@@ -9,16 +9,16 @@ summary : EC-CUBE 4.3から4.4へのマイグレーションについて記載�
 
 # 4.3から4.4へのマイグレーション
 
-EC-CUBE 4.3から4.4へのマイグレーションを解説します。
-
-EC-CUBE本体および一部公式プラグインをEC-CUBE 4.4に対応し、コードの移植が必要な箇所をまとめたものです。
+EC-CUBE本体および一部公式プラグインを4.4に対応した際に、コードの移植が必要になった箇所をまとめたものです。
 
 ## 主な変更点
 
-- **Symfony 7.4 対応**（Symfony 6.x → 7.4）
-- **Doctrine ORM 3.0 対応**（Doctrine ORM 2.x → 3.0）
-- **PHP 8.2+ 対応**（PHP 8.1〜8.3 → 8.2〜8.5）
-- **Annotations → Attributes への完全移行**
+- Symfony 7.4 対応（Symfony 6.4 → 7.4）
+- Doctrine ORM 3 / DBAL 4 対応（ORM 2.x → 3.x、DBAL 3.x → 4.x）
+- PHP 8.2+ 対応（PHP 8.1〜8.3 → 8.2〜8.5）
+- Annotations → Attributes への完全移行（`doctrine/annotations`、`sensio/framework-extra-bundle` を依存から削除）
+- 在庫数を `ProductStock::stock` に一本化（`dtb_product_class.stock` 列を削除）
+- 非推奨 public API と未発火のイベント定数を削除
 
 ## 目次
 
@@ -26,77 +26,48 @@ EC-CUBE本体および一部公式プラグインをEC-CUBE 4.4に対応し、�
 - [環境設定ファイルの更新](#環境設定ファイルの更新)
 - [設定ファイル（YAML）の更新](#設定ファイルyamlの更新)
 - [PHP 8.2+対応](#php-82対応)
-    - [null許容型の明示](#null許容型の明示)
-    - [型パラメータの厳格化](#型パラメータの厳格化)
-    - [戻り値型の明示](#戻り値型の明示)
-    - [nullをarray_key_exists()のキーとして使用](#nullをarray_key_existsのキーとして使用)
-    - [PHPDocアノテーションから型宣言への移行](#phpdocアノテーションから型宣言への移行)
 - [Symfony 7対応](#symfony-7対応)
-    - [バリデーション制約の名前付き引数形式](#バリデーション制約の名前付き引数形式)
-    - [ルーティングの変更](#ルーティングの変更)
-    - [トランザクション管理の明示化](#トランザクション管理の明示化)
-    - [セッションCookie設定の変更](#セッションcookie設定の変更)
 - [Doctrine ORM 3.0対応](#doctrine-orm-30対応)
-    - [Annotations → Attributes への移行](#annotations--attributes-への移行)
-    - [EntityManagerの変更](#entitymanagerの変更)
-    - [ClassMetadataの変更](#classmetadataの変更)
-    - [型付きプロパティの必須化](#型付きプロパティの必須化)
-    - [Doctrine EventSubscriber → Listenerへの変換](#doctrine-eventsubscriber--listenerへの変換)
+- [在庫数の持ち方の変更](#在庫数の持ち方の変更)
 - [Monolog Processorの変更](#monolog-processorの変更)
 - [BCMath対応](#bcmath対応)
 - [削除されたクラスへの対応](#削除されたクラスへの対応)
+- [削除された public API・イベント定数](#削除された-public-apiイベント定数)
 - [その他の仕様変更](#その他の仕様変更)
-    - [Rectorによる自動修正](#rectorによる自動修正)
-    - [Symfonyバリデーションメッセージの翻訳変更](#symfonyバリデーションメッセージの翻訳変更)
 - [プラグイン開発者向け移行ガイド](#プラグイン開発者向け移行ガイド)
 - [トラブルシューティング](#トラブルシューティング)
 - [移行チェックリスト](#移行チェックリスト)
+- [参考資料](#参考資料)
 
 ---
 
 ## プラグイン・カスタマイズの互換性について
 
-EC-CUBE 4.3と4.4では、プラグインおよびカスタマイズの互換性は担保されません。
+EC-CUBE 4.3と4.4では、プラグインおよびカスタマイズの互換性は担保されません。Doctrine ORM 3.0およびSymfony 7.4へのアップグレードに伴い、Annotations形式のEntityと`@Route`アノテーションはサポート外になります。それぞれAttributes形式、`#[Route]`アトリビュートへ移行してください。
 
-Doctrine ORM 3.0およびSymfony 7.4への大幅なアップグレードに伴い、以下の変更が必要です：
-
-- **Annotations形式のEntityはサポート外**となります。プラグインやカスタマイズでEntityがAnnotations形式で定義されている場合は、Attributes形式への移行が必要です。
-- **ルーティングのAnnotations形式はサポート外**となります。プラグインやカスタマイズでControllerの`@Route`アノテーションを使用している場合は、`#[Route]`アトリビュートへの移行が必要です。
-
-本ドキュメントの修正を実施いただくことで、4.4でプラグインやカスタマイズを動作させることができます。
+本ドキュメントの修正を実施すると、4.4でプラグインやカスタマイズを動作させることができます。
 
 ---
 
 ## 環境設定ファイルの更新
 
-### .env.dist / .env の更新
-
-**ECCUBE_AUTH_MAGIC の必須化**
-
-Symfony 7では `framework.secret` が空値を許容しないため、`ECCUBE_AUTH_MAGIC` の設定が必須になります。
+Symfony 7では`framework.secret`が空値を許容しないため、`.env.dist` / `.env`の`ECCUBE_AUTH_MAGIC`が必須になります。
 
 ```bash
 # .env.dist または .env に追加
 ECCUBE_AUTH_MAGIC=<your-random-secret-key-here>
-```
 
-**ランダムな値を生成する方法：**
-
-```bash
-# Linux/Macの場合
+# ランダムな値の生成例（Linux/Mac）
 openssl rand -hex 32
-
-# または
-cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 64 | head -n 1
 ```
 
 ---
 
 ## 設定ファイル（YAML）の更新
 
-以下の設定ファイルの更新が必要です。これらの変更はEC-CUBE本体で対応されますが、カスタマイズで設定ファイルを上書きしている場合は確認が必要です。
+これらの変更はEC-CUBE本体で対応されますが、カスタマイズで設定ファイルを上書きしている場合は確認してください。
 
-### app/config/eccube/packages/framework.yaml の更新
+### app/config/eccube/packages/framework.yaml
 
 ```yaml
 framework:
@@ -116,24 +87,23 @@ framework:
         enable_attributes: true    # 追加
         email_validation_mode: html5  # 追加
         # enable_annotations は削除（enable_attributesと併用不可）
+
+    # ESI / fragments は無効化（/_fragment を公開しない）
+    # render_esi() / render_hinclude() を使う場合のみ有効にする
+    esi: { enabled: false }
+    fragments: { enabled: false }
 ```
 
-**重要：Symfony 7でのセッションCookie設定のデフォルト値変更**
-
-Symfony 7.0では、セッションCookieのデフォルト設定が以下のように変更されました：
+Symfony 7.0でセッションCookieのデフォルト値が変わりました。
 
 | 設定 | Symfony 6.4以前 | Symfony 7.0以降 |
 |------|----------------|----------------|
 | `cookie_secure` | 未設定（false相当） | `auto` |
 | `cookie_samesite` | 未設定（null相当） | `lax` |
 
-**開発環境での注意事項**
+`cookie_samesite: none`はブラウザ仕様により`Secure`フラグが必須です。HTTP環境では`cookie_secure: auto`でSecureフラグが付かないため、ブラウザがCookieを拒否してログインできなくなります。開発環境での対処は「[トラブルシューティング](#トラブルシューティング)」を参照してください。外部決済モジュールとの連携で`SameSite=None`が必要な場合は、開発環境でもHTTPS対応を推奨します。
 
-- `cookie_samesite: none` を設定した場合、ブラウザ仕様により **`Secure` フラグが必須** となります
-- HTTP環境では `cookie_secure: auto` により Secure フラグが付かないため、ブラウザがCookieを拒否する可能性があります
-- 外部決済モジュールとの連携で `SameSite=None` が必要な場合は、開発環境でもHTTPS対応が推奨されます
-
-### app/config/eccube/packages/doctrine.yaml の更新
+### app/config/eccube/packages/doctrine.yaml
 
 ```yaml
 doctrine:
@@ -143,7 +113,7 @@ doctrine:
             auto_mapping: false  # 追加
 ```
 
-### app/config/eccube/packages/test/doctrine.yaml の更新
+### app/config/eccube/packages/test/doctrine.yaml
 
 ```yaml
 doctrine:
@@ -151,20 +121,18 @@ doctrine:
         use_savepoints: true  # DAMA Doctrine Test Bundle 8.0で必須
 ```
 
-### app/config/eccube/packages/security.yaml の更新
+### app/config/eccube/packages/security.yaml
 
 ```yaml
 security:
     # enable_authenticator_manager は削除（Symfony 6.2+でデフォルト有効）
-    # 以下の行を削除:
     # enable_authenticator_manager: true
 ```
 
-### phpunit.xml.dist の更新
+### phpunit.xml.dist
 
-PHPUnit 11では設定ファイルの形式が変更されました。
+PHPUnit 11で設定ファイルの形式が変わりました。
 
-**Before (PHPUnit 9.x):**
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit
@@ -173,28 +141,20 @@ PHPUnit 11では設定ファイルの形式が変更されました。
     backupGlobals="false"
     colors="true"
     bootstrap="tests/bootstrap.php"
-    convertDeprecationsToExceptions="false"
->
-    <!-- ... -->
-    <listeners>
-        <listener class="Symfony\Bridge\PhpUnit\SymfonyTestsListener" />
-        <listener class="\DAMA\DoctrineTestBundle\PHPUnit\PHPUnitListener" />
-    </listeners>
-</phpunit>
-```
-
-**After (PHPUnit 11):**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<phpunit
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
-    backupGlobals="false"
-    colors="true"
-    bootstrap="tests/bootstrap.php"
+    failOnDeprecation="true"
+    displayDetailsOnTestsThatTriggerDeprecations="true"
 >
     <!-- ... -->
     <!-- convertDeprecationsToExceptions属性は削除 -->
+
+    <!-- 非推奨 API の検出範囲。自コードが直接呼ぶもの (direct) だけを対象にし、
+         self (自コードの @deprecated 予告) と indirect (vendor 内部) は除外する -->
+    <source ignoreSelfDeprecations="true"
+            ignoreIndirectDeprecations="true">
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+    </source>
 
     <!-- listeners から extensions に変更 -->
     <extensions>
@@ -203,253 +163,39 @@ PHPUnit 11では設定ファイルの形式が変更されました。
 </phpunit>
 ```
 
-**主な変更点：**
-- `convertDeprecationsToExceptions` 属性を削除
-- `<listeners>` → `<extensions>` に変更
-- `PHPUnitListener` → `PHPUnitExtension` に変更
+- `convertDeprecationsToExceptions`属性を削除（残っていると`Unknown or risky test attribute`エラーになります）
+- `<listeners>` → `<extensions>`、`PHPUnitListener` → `PHPUnitExtension`に変更
+- `failOnDeprecation="true"`を追加（非推奨 API を呼ぶとテストが失敗します）
+- `SYMFONY_DEPRECATIONS_HELPER`は PHPUnit 10 以降では読まれないため削除（`symfony/phpunit-bridge`の`bootstrap.php`が PHPUnit 10 以上で早期 return します）
+- データプロバイダーメソッドは`public static`にする（`Data Provider method must be static`エラーになります）
 
 ---
 
 ## PHP 8.2+対応
 
-EC-CUBE 4.4では、PHPのシステム要件は **8.2〜8.5** となります。
-
-### null許容型の明示
-
-エラー例
-
-```
-Error: Typed property class@anonymous::$value must not be accessed before initialization
-```
-
-コード例
-
-```php
-// NG
-public string $value; // 初期化されていない
-
-// OK
-public ?string $value = null; // null許容型として明示
-```
-
-### 型パラメータの厳格化
-
-型パラメータに関するエラーが発生する場合があります。
-
-引数の型が不一致のエラー例
-
-```
-TypeError: class@anonymous(): Argument #1 ($value) must be of type string, null given, called in 
-
-```
-
-このようなエラーが出た場合は、引数の型パラメータを正確に指定することで解消できます。
-
-コード例
-
-```php
-// エラー
-// String型を期待しているのに、nullを渡している。
-$object = new class {
-    public function processString(string $value): string
-    {
-        return $value;
-    }
-};
-
-$result = $object->processString(null);
-// -> TypeError: class@anonymous(): Argument #1 ($value) must be of type string, null given, called in test.php on line x
-
-
-// 修正例1
-// 引数をStringに修正
-$object = new class {
-    public function processString(string $value): string
-    {
-        return $value;
-    }
-};
-
-$result = $object->processString('test');
-
-// 修正例2
-// null許容型に変更
-$object = new class {
-    public function processString(?string $value): string // stringから?stringへ変更
-    {
-        return $value;
-    }
-};
-
-$result = $object->processString(null);
-```
-
-### 戻り値型の明示
-
-PHP 8.5では、メソッドの戻り値型を明示する必要がある場合があります。
-
-エラー例
-
-```
-TypeError: class@anonymous::getInt(): Return value must be of type int, string returned
-```
-
-コード例
-
-```php
-// NG: 戻り値型が不一致の場合にエラーが発生
-class Sample {
-    public function getValue() {
-        return 123;
-    }
-}
-
-// OK: 戻り値型を明示
-class Sample {
-    public function getValue(): int {
-        return 123;
-    }
-}
-```
-
-### nullをarray_key_exists()のキーとして使用
-
-PHP 8.5では、`array_key_exists()`のキー引数に`null`を渡すと`TypeError`が発生します。
-
-```php
-// NG: PHP 8.5以降ではTypeErrorが発生
-$array = [null => 1];
-var_dump(array_key_exists(null, $array));
-
-// OK: 空文字列を使用
-$array = ['' => 1];
-var_dump(array_key_exists('', $array));
-```
-
-### PHPDocアノテーションから型宣言への移行
-
-EC-CUBE 4.3までは、メソッドの引数や戻り値の型をPHPDocの`@param`や`@return`アノテーションで指定していましたが、EC-CUBE 4.4では実際のコードで型宣言を行う必要があります。
-
-#### 引数の型宣言
-
-4.3までの書き方では、PHPDocで型を指定していましたが、4.4では引数に直接型を指定します。
-
-コード例
+EC-CUBE 4.4では、PHPのシステム要件は8.2〜8.5になります。PHPDocの`@param` / `@return`で型を示していたコードは、引数・戻り値・プロパティに型宣言を付けてください。型宣言と重複するPHPDocはRectorが自動的に削除します。
 
 ```php
 // 4.3までの書き方（PHPDocアノテーション）
-class SampleService
+/**
+ * @param string|null $value
+ * @return string|null
+ */
+public function process($value)
 {
-    /**
-     * @param string $value
-     * @param int $count
-     */
-    public function process($value, $count)
-    {
-        // ...
-    }
+    return $value;
 }
 
 // 4.4での書き方（型宣言）
-class SampleService
+public function process(?string $value): ?string
 {
-    public function process(string $value, int $count): void
-    {
-        // ...
-    }
+    return $value;
 }
 ```
 
-#### 戻り値の型宣言
+型を厳格にすると、未初期化の型付きプロパティ（`Typed property ... must not be accessed before initialization`）や、`string`型の引数に`null`を渡す`TypeError`が表面化します。nullを取りうる値は`?string $value = null`のようにnull許容型として宣言してください。
 
-4.3までの書き方では、PHPDocで戻り値の型を指定していましたが、4.4では戻り値型を明示的に宣言します。
-
-コード例
-
-```php
-// 4.3までの書き方（PHPDocアノテーション）
-class SampleService
-{
-    /**
-     * @return string
-     */
-    public function getValue()
-    {
-        return 'test';
-    }
-}
-
-// 4.4での書き方（型宣言）
-class SampleService
-{
-    public function getValue(): string
-    {
-        return 'test';
-    }
-}
-```
-
-#### null許容型の指定
-
-null許容型の場合も、型宣言で明示的に指定します。
-
-コード例
-
-```php
-// 4.3までの書き方（PHPDocアノテーション）
-class SampleService
-{
-    /**
-     * @param string|null $value
-     * @return string|null
-     */
-    public function process($value)
-    {
-        return $value;
-    }
-}
-
-// 4.4での書き方（型宣言）
-class SampleService
-{
-    public function process(?string $value): ?string
-    {
-        return $value;
-    }
-}
-```
-
-#### 複合型（Union型）の指定
-
-PHP 8.0以降では、Union型を使用して複数の型を指定できます。
-
-コード例
-
-```php
-// 4.3までの書き方（PHPDocアノテーション）
-class SampleService
-{
-    /**
-     * @param string|int $value
-     * @return string|int
-     */
-    public function process($value)
-    {
-        return $value;
-    }
-}
-
-// 4.4での書き方（Union型）
-class SampleService
-{
-    public function process(string|int $value): string|int
-    {
-        return $value;
-    }
-}
-```
-
-**注意**: 実際の型宣言がある場合、PHPDocの`@param`や`@return`は不要になります。Rectorを使用すると、型宣言と重複するPHPDocアノテーションは自動的に削除されます。
+PHP 8.5では`array_key_exists()`のキー引数に`null`を渡すと`TypeError`になります。`[null => 1]`のようなキーは空文字列`''`に置き換えてください。
 
 ---
 
@@ -471,53 +217,33 @@ new Assert\Length(max: 255, maxMessage: '最大{{ limit }}文字です');
 
 ### ルーティングの変更
 
-Symfony 7.4では、ルーティングのAnnotations形式はサポートされません。カスタマイズでControllerを作成している場合、`@Route`アノテーションを使用している場合は、`#[Route]`アトリビュートへの移行が必要です。
-
-**複数のルートを定義する例**
+Symfony 7.4では、ルーティングのAnnotations形式はサポートされません。`@Route`アノテーションを`#[Route]`アトリビュートへ移行してください。
 
 ```php
 // 4.3までの書き方（Annotations）
 use Symfony\Component\Routing\Annotation\Route;
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-use Symfony\Component\HttpFoundation\Request;
-use Knp\Component\Pager\PaginatorInterface;
 
-class OrderController extends AbstractController
-{
     /**
      * @Route("/%eccube_admin_route%/order", name="admin_order", methods={"GET", "POST"})
      * @Route("/%eccube_admin_route%/order/page/{page_no}", name="admin_order_page", requirements={"page_no": "\d+"}, methods={"GET", "POST"})
      * @Template("@admin/Order/index.twig")
      */
     public function index(Request $request, PaginatorInterface $paginator, ?int $page_no = null): array
-    {
-        // ...
-    }
-}
 
 // 4.4での書き方（Attributes）
-use Symfony\Bridge\Twig\Attribute\Template;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
-use Knp\Component\Pager\PaginatorInterface;
+use Symfony\Bridge\Twig\Attribute\Template;
 
-class OrderController extends AbstractController
-{
     #[Route(path: '/%eccube_admin_route%/order', name: 'admin_order', methods: ['GET', 'POST'])]
     #[Route(path: '/%eccube_admin_route%/order/page/{page_no}', name: 'admin_order_page', requirements: ['page_no' => '\d+'], methods: ['GET', 'POST'])]
     #[Template(template: '@admin/Order/index.twig')]
     public function index(Request $request, PaginatorInterface $paginator, ?int $page_no = null): array
-    {
-        // ...
-    }
-}
 ```
 
 ### トランザクション管理の明示化
 
-Symfony 7およびDoctrine ORM 3.0では、トランザクション管理がより厳格になっています。
-
-`EntityManager::lock()`を使用する場合は、明示的にトランザクションを開始する必要があります。
+Symfony 7およびDoctrine ORM 3.0では、`EntityManager::lock()`を使用する場合に明示的にトランザクションを開始します。
 
 ```php
 // 4.4での書き方
@@ -526,7 +252,6 @@ if (!$this->entityManager->getConnection()->isTransactionActive()) {
 }
 
 try {
-    // ロック処理
     $this->entityManager->lock($entity, LockMode::PESSIMISTIC_WRITE);
     // ...
     $this->entityManager->getConnection()->commit();
@@ -536,25 +261,13 @@ try {
 }
 ```
 
-### セッションCookie設定の変更
-
-Symfony 7.0では、セッションCookieのデフォルト設定が変更されました。詳細は「[設定ファイル（YAML）の更新](#設定ファイルyamlの更新)」セクションを参照してください。
-
-**開発環境での注意事項**
-
-HTTP環境で開発している場合、`cookie_samesite: none` を設定するとブラウザがCookieを拒否する可能性があります。外部決済モジュールをテストする場合は、HTTPS環境の使用を推奨します。
-
 ---
 
 ## Doctrine ORM 3.0対応
 
-Doctrine ORM 3.0は、2.xからの大幅なアップグレードとなります。主な変更点を以下に示します。
-
 ### Annotations → Attributes への移行
 
-**Doctrine ORM 3.0ではAnnotationsはサポートされません。** すべてのEntityをPHP 8 Attributesに移行する必要があります。
-
-#### Entity定義の変更
+Doctrine ORM 3.0ではAnnotationsはサポートされません。すべてのEntityをPHP 8 Attributesに移行してください。型指定には`Doctrine\DBAL\Types\Types`の定数を使用し、プロパティには型宣言を付けます。
 
 ```php
 // 4.3までの書き方（Annotations）
@@ -565,13 +278,15 @@ Doctrine ORM 3.0は、2.xからの大幅なアップグレードとなります�
 class Sample
 {
     /**
+     * @var int|null
      * @ORM\Column(name="id", type="integer")
      * @ORM\Id
      * @ORM\GeneratedValue(strategy="IDENTITY")
      */
     private $id;
-    
+
     /**
+     * @var string|null
      * @ORM\Column(name="name", type="string", length=255)
      */
     private $name;
@@ -589,11 +304,13 @@ class Sample
     #[ORM\Id]
     #[ORM\GeneratedValue(strategy: 'IDENTITY')]
     private ?int $id = null;
-    
+
     #[ORM\Column(name: 'name', type: Types::STRING, length: 255)]
     private ?string $name = null;
 }
 ```
+
+型定数には`Types::INTEGER`、`Types::STRING`のほか`Types::DATETIMETZ_MUTABLE`、`Types::BOOLEAN`などがあります。
 
 #### インデックスとユニーク制約の分離
 
@@ -620,44 +337,29 @@ ORM 3.0では、`@ORM\Table`の`indexes`と`uniqueConstraints`を別々のアト
 class Sample
 ```
 
-#### 型定数の使用
-
-型指定には`Doctrine\DBAL\Types\Types`の定数を使用することが推奨されます。
-
-```php
-use Doctrine\DBAL\Types\Types;
-
-// 推奨される書き方
-#[ORM\Column(name: 'id', type: Types::INTEGER)]
-#[ORM\Column(name: 'name', type: Types::STRING, length: 255)]
-#[ORM\Column(name: 'created_at', type: Types::DATETIMETZ_MUTABLE)]
-#[ORM\Column(name: 'is_active', type: Types::BOOLEAN)]
-```
-
 ### EntityManagerの変更
 
-#### detach()の削除
-
-`EntityManager::detach()`メソッドは削除されました。代わりに`clear()`を使用してください。
-
 ```php
-// 4.3までの書き方
-$this->entityManager->detach($entity);
+// detach() は削除。clear() を使う
+$this->entityManager->detach($entity);         // 4.3
+$this->entityManager->clear();                 // 4.4
 
-// 4.4での書き方
-$this->entityManager->clear();
-```
+// clear() は引数を取らない
+$this->entityManager->clear(Customer::class);  // 4.3
+$this->entityManager->clear();                 // 4.4
 
-#### clear()の引数削除
+// flush() にエンティティは渡せない
+$this->entityManager->flush($entity);          // 4.3
+$this->entityManager->flush();                 // 4.4
 
-`clear()`メソッドは引数を取らなくなりました。
+// Configuration::setSQLLogger() は削除。CSV 出力などで SQL ログを無効化していたコードは呼び出しごと削除する
+// （ORM 3 は既定で SQL ログをメモリに蓄積しない）
+$this->entityManager->getConfiguration()->setSQLLogger(null);  // 4.3（削除する）
 
-```php
-// 4.3までの書き方
-$this->entityManager->clear(Customer::class);
-
-// 4.4での書き方
-$this->entityManager->clear();
+// doctrine/common は 4.4 の依存に含まれないため Doctrine\Common\Util\ClassUtils は使えない
+// プロキシから実エンティティのクラス名を得るには ClassMetadata を使う
+$entityName = ClassUtils::getClass($entity);                                       // 4.3
+$entityName = $this->entityManager->getClassMetadata($entity::class)->getName();  // 4.4
 ```
 
 ### ClassMetadataの変更
@@ -672,33 +374,14 @@ $reflProperty = $metadata->reflFields['fieldName'];
 $reflProperty = $metadata->getReflectionProperty('fieldName');
 ```
 
-### 型付きプロパティの必須化
-
-Doctrine ORM 3.0では、Entityのプロパティに型宣言を追加する必要があります。
-
-```php
-// 4.3までの書き方
-/**
- * @var int|null
- */
-private $id;
-
-/**
- * @var string|null
- */
-private $name;
-
-// 4.4での書き方
-private ?int $id = null;
-private ?string $name = null;
-```
+プロキシの判定に使う`Doctrine\ORM\Proxy\Proxy`は`Doctrine\Persistence\Proxy`に変わりました。
 
 ### Doctrine EventSubscriber → Listenerへの変換
 
-Doctrine ORM 3.0では、EventSubscriberからListenerへの移行が推奨されています。カスタマイズで独自にDoctrine EventSubscriberを実装している場合は、Listenerへの移行が必要です。
+カスタマイズで独自にDoctrine EventSubscriberを実装している場合は、Listenerへ移行してください。
 
-**Before (EventSubscriber):**
 ```php
+// 4.3までの書き方（EventSubscriber）
 use Doctrine\Common\EventSubscriber;
 use Doctrine\ORM\Events;
 use Doctrine\ORM\Event\LifecycleEventArgs;
@@ -707,26 +390,14 @@ class MyEventSubscriber implements EventSubscriber
 {
     public function getSubscribedEvents(): array
     {
-        return [
-            Events::prePersist,
-            Events::postLoad,
-        ];
+        return [Events::prePersist, Events::postLoad];
     }
 
-    public function prePersist(LifecycleEventArgs $args): void
-    {
-        // ...
-    }
-
-    public function postLoad(LifecycleEventArgs $args): void
-    {
-        // ...
-    }
+    public function prePersist(LifecycleEventArgs $args): void { /* ... */ }
+    public function postLoad(LifecycleEventArgs $args): void { /* ... */ }
 }
-```
 
-**After (Listener):**
-```php
+// 4.4での書き方（Listener）
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\Events;
 use Doctrine\Persistence\Event\LifecycleEventArgs;
@@ -735,156 +406,137 @@ use Doctrine\Persistence\Event\LifecycleEventArgs;
 #[AsDoctrineListener(event: Events::postLoad)]
 class MyEventListener
 {
-    public function prePersist(LifecycleEventArgs $args): void
-    {
-        // ...
-    }
-
-    public function postLoad(LifecycleEventArgs $args): void
-    {
-        // ...
-    }
+    public function prePersist(LifecycleEventArgs $args): void { /* ... */ }
+    public function postLoad(LifecycleEventArgs $args): void { /* ... */ }
 }
 ```
 
-**重要な変更点：**
-- `EventSubscriber` インターフェースを削除
-- `getSubscribedEvents()` メソッドを削除
-- `#[AsDoctrineListener]` 属性を各イベントに追加
-- `Doctrine\ORM\Event\*` → `Doctrine\Persistence\Event\*` へ名前空間変更
+- `EventSubscriber`インターフェースと`getSubscribedEvents()`を削除し、`#[AsDoctrineListener]`属性をイベントごとに追加
+- `Doctrine\ORM\Event\*` → `Doctrine\Persistence\Event\*`へ名前空間変更
+
+### Doctrine DBAL 4対応
+
+DBAL が 3.x から 4.x になり、以下のメソッドが削除されました。
+
+```php
+// 4.3までの書き方
+$platformName = $connection->getDatabasePlatform()->getName();
+switch ($platformName) {
+    case 'postgresql':
+        // ...
+}
+$schemaManager = $connection->getSchemaManager();
+
+// 4.4での書き方
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
+use Doctrine\DBAL\Platforms\SQLitePlatform;
+
+$platform = $connection->getDatabasePlatform();
+match (true) {
+    $platform instanceof PostgreSQLPlatform => /* ... */,
+    $platform instanceof AbstractMySQLPlatform => /* ... */,
+    $platform instanceof SQLitePlatform => /* ... */,
+};
+$schemaManager = $connection->createSchemaManager();
+```
+
+---
+
+## 在庫数の持ち方の変更
+
+4.4 では在庫数の正典が`ProductStock::stock`（`dtb_product_stock.stock`）に一本化され、`dtb_product_class.stock`列は削除されました。4.3 までは両方のテーブルに在庫数が二重に保持されていました。
+
+| 項目 | 4.3 | 4.4 |
+|------|-----|-----|
+| 在庫数の保存先 | `dtb_product_class.stock` と `dtb_product_stock.stock` | `dtb_product_stock.stock` のみ |
+| `ProductClass::getStock()` / `setStock()` | 自身の列を読み書き | `ProductStock` へ委譲（引き続き使用可） |
+| 在庫の有無 | `stock` と `stock_unlimited` から計算 | `dtb_product_class.in_stock`（flush 時に自動再計算） |
+| `ProductRepository::COLUMNS['stock']` | `pc.stock` | `ps.stock` |
+
+### DQL / SQL の修正
+
+`pc.stock`を参照する DQL は`QueryException`になります。`ProductStock`を join して参照してください。
+
+```php
+// 4.3までの書き方
+$qb->andWhere('pc.stock > 0');
+
+// 4.4での書き方
+$qb->leftJoin('pc.ProductStock', 'ps')
+   ->andWhere('ps.stock > 0');
+
+// 在庫の有無だけを判定する場合は in_stock を使う
+$qb->andWhere('pc.in_stock = true');
+```
+
+### ProductStockを差し替えているコードの修正
+
+`new ProductStock()`で作成して`setProductStock()`で差し替えると、委譲先が入れ替わり入力した在庫数が失われます。`ProductClass::setStock()`を使ってください（`ProductStock`が無ければ自動で作成されます）。
+
+```php
+// 4.3までの書き方
+$ProductStock = new ProductStock();
+$ProductStock->setProductClass($ProductClass);
+$ProductStock->setStock($stock);
+$ProductClass->setProductStock($ProductStock);
+
+// 4.4での書き方
+$ProductClass->setStock($stock);
+```
+
+### マイグレーションの実行
+
+`doctrine:schema:update`では旧列は削除されません（`LegacyProductClassStockColumnSubscriber`が削除を抑止します）。4.3 からのアップデート後にマイグレーション`Version20260924000000`を実行してください。旧列から`dtb_product_stock`を補完したうえで旧列を削除し、`in_stock`を再計算します。マイグレーションを実行するまで`in_stock`はすべて false のため、在庫なしとして扱われます。
+
+```bash
+bin/console doctrine:migrations:migrate
+```
 
 ---
 
 ## Monolog Processorの変更
 
-Monolog 3.0では、Processorのシグネチャが変更されました。カスタマイズで独自にMonolog Processorを実装している場合は、シグネチャの変更が必要です。
+Monolog 3.0では、Processorの引数と戻り値が`array`から`LogRecord`に変わりました。カスタマイズで独自にProcessorを実装している場合はシグネチャを変更してください（EC-CUBE標準のProcessorは本体で対応済みです）。
 
-**Before (Monolog 2.x):**
 ```php
-use Monolog\Processor\ProcessorInterface;
-
-class CustomProcessor implements ProcessorInterface
+// 4.3までの書き方（Monolog 2.x）
+public function __invoke(array $record): array
 {
-    public function __invoke(array $record): array
-    {
-        $record['extra']['custom'] = 'value';
-        return $record;
-    }
+    $record['extra']['custom'] = 'value';
+    return $record;
 }
-```
 
-**After (Monolog 3.x):**
-```php
+// 4.4での書き方（Monolog 3.x）
 use Monolog\LogRecord;
-use Monolog\Processor\ProcessorInterface;
 
-class CustomProcessor implements ProcessorInterface
+public function __invoke(LogRecord $record): LogRecord
 {
-    public function __invoke(LogRecord $record): LogRecord
-    {
-        $record->extra['custom'] = 'value';
-        return $record;
-    }
+    $record->extra['custom'] = 'value';
+    return $record;
 }
 ```
 
-**主な変更点：**
-- 引数の型が `array` から `LogRecord` に変更
-- 戻り値の型が `array` から `LogRecord` に変更
-- 配列アクセス `$record['extra']` からオブジェクトプロパティ `$record->extra` に変更
-
-**注意**: EC-CUBE標準のMonolog Processorは本体で対応されます。
+`symfony/monolog-bundle`も 4.x になり、`excluded_404s`、`console_formater_options`の設定と`elasticsearch`、`mongo`、`sentry`、`raven`のハンドラ type が削除されました。プラグインで`monolog.yaml`を追加している場合は確認してください。
 
 ---
 
 ## BCMath対応
 
-EC-CUBE 4.4では、金額計算の精度向上のため、BCMath関数を使用した精密計算が推奨されます。
-
-### BCMath Polyfillのインストール
-
-`nanasess/bcmath-polyfill`パッケージをインストールすることで、BCMath拡張がない環境でも動作します。
+EC-CUBE 4.4 本体は`nanasess/bcmath-polyfill`（^1.2）に依存しており、BCMath拡張がない環境でも動作します（インストーラでは`bcmath`は推奨モジュールです）。このパッケージはBCMath拡張の代替実装に加えて、PHP 8.4 で追加された丸め関数`bcfloor`、`bcceil`、`bcround`を PHP 8.2 / 8.3 でも使えるようにします。プラグイン単体で依存を宣言する場合は以下を追加します。
 
 ```bash
-composer require nanasess/bcmath-polyfill:^1.0
+composer require nanasess/bcmath-polyfill:^1.2
 ```
 
-このパッケージは以下を提供します：
-- **PHP 8.3に存在しない丸め関数の実装**（`bcfloor`、`bcceil`、`bcround`）
-- **BCMath拡張の代替実装**（BCMath拡張がない環境向け）
-
-### BCMath関数の基本
+金額計算には float ではなく BCMath 関数（`bcadd`、`bcsub`、`bcmul`、`bcdiv`、`bccomp`）の使用を推奨します。引数と戻り値は文字列で、最後の引数`$scale`で小数点以下の桁数を指定します（通常、金額は2桁）。`bcfloor`と`bcceil`は引数が1つのみで整数部分を返すため、小数点以下の桁数を指定して切り捨て/切り上げする場合は10の累乗を掛けてから処理します。
 
 ```php
-// 加算
-$total = bcadd('100.50', '200.30', 2);  // '300.80'
-
-// 減算
-$diff = bcsub('500.00', '150.75', 2);  // '349.25'
-
-// 乗算
-$tax = bcmul('1000', '0.10', 2);  // '100.00'
-
-// 除算
-$unit = bcdiv('1000', '3', 2);  // '333.33'
-
-// 比較（-1: $a < $b, 0: $a = $b, 1: $a > $b）
-$cmp = bccomp('100.00', '99.99', 2);  // 1
-
-// 丸め処理（nanasess/bcmath-polyfillが提供）
-$floor = bcfloor('123.456');   // '123' （切り捨て、整数部分のみ）
-$ceil = bcceil('123.456');     // '124' （切り上げ、整数部分のみ）
-$round = bcround('123.456', 2);   // '123.46' （四捨五入、精度指定可能）
+$tax = bcdiv(bcmul($price, $taxRate, 4), '100', 2);  // price * taxRate / 100
+$total = bcadd($total, bcmul((string)$price, (string)$quantity, 2), 2);
+$round = bcround('123.456', 2);  // '123.46'
+$floor = bcfloor('123.456');     // '123'
 ```
-
-### 実装例
-
-**Before（floatでの計算）:**
-```php
-public function calculateTax(float $price, float $taxRate): float
-{
-    return $price * $taxRate / 100;
-}
-
-public function calculateTotal(array $items): float
-{
-    $total = 0;
-    foreach ($items as $item) {
-        $total += $item->getPrice() * $item->getQuantity();
-    }
-    return $total;
-}
-```
-
-**After（BCMathでの精密計算）:**
-```php
-public function calculateTax(string $price, string $taxRate): string
-{
-    // price * taxRate / 100
-    return bcdiv(bcmul($price, $taxRate, 4), '100', 2);
-}
-
-public function calculateTotal(array $items): string
-{
-    $total = '0';
-    foreach ($items as $item) {
-        $itemTotal = bcmul(
-            (string)$item->getPrice(),
-            (string)$item->getQuantity(),
-            2
-        );
-        $total = bcadd($total, $itemTotal, 2);
-    }
-    return $total;
-}
-```
-
-### 注意事項
-
-- BCMath関数は**文字列**を引数として受け取り、**文字列**を返します
-- `bcadd`、`bcsub`、`bcmul`、`bcdiv`、`bcround`は最後の引数`$scale`で小数点以下の桁数を指定します（通常、金額は2桁）
-- **`bcfloor`と`bcceil`は引数が1つのみで、整数部分を返します**（小数点以下の桁数指定はできません）
-- 小数点以下の桁数を指定して切り捨て/切り上げする場合は、10の累乗を掛けてから処理します
 
 ---
 
@@ -892,19 +544,15 @@ public function calculateTotal(array $items): string
 
 ### SameSiteNoneCompatSessionHandler
 
-PHP 7.2対応のレガシーセッションハンドラーが削除されました。
+PHP 7.2対応のレガシーセッションハンドラーが削除されました。`framework.yaml`の`handler_id`を標準のハンドラーに戻します。
 
-**Before (4.3):**
 ```yaml
-# app/config/eccube/packages/framework.yaml
+# 4.3までの書き方
 framework:
     session:
         handler_id: Eccube\Session\Storage\Handler\SameSiteNoneCompatSessionHandler
-```
 
-**After (4.4):**
-```yaml
-# app/config/eccube/packages/framework.yaml
+# 4.4での書き方
 framework:
     session:
         handler_id: session.handler.native_file
@@ -916,28 +564,101 @@ framework:
 
 アノテーションリーダーは不要になりました。属性はPHPのリフレクションAPIで直接読み取れます。
 
-**Before (4.3):**
 ```php
+// 4.3までの書き方
 use Eccube\DependencyInjection\Facade\AnnotationReaderFacade;
 
 $reader = AnnotationReaderFacade::create();
-$annotations = $reader->getClassAnnotations($reflectionClass);
-
-foreach ($annotations as $annotation) {
+foreach ($reader->getClassAnnotations($reflectionClass) as $annotation) {
     if ($annotation instanceof EntityExtension) {
         // ...
     }
 }
-```
 
-**After (4.4):**
-```php
-$attributes = $reflectionClass->getAttributes(\Eccube\Attribute\EntityExtension::class);
-
-foreach ($attributes as $attribute) {
+// 4.4での書き方
+foreach ($reflectionClass->getAttributes(\Eccube\Attribute\EntityExtension::class) as $attribute) {
     $instance = $attribute->newInstance();
     // ...
 }
+```
+
+---
+
+## 削除された public API・イベント定数
+
+### 非推奨public APIの削除
+
+4.3 で`@deprecated`だった以下の API は削除されました。
+
+| 削除された API | 代替 |
+|---------------|------|
+| `OrderItem::getTaxRuleId()` / `setTaxRuleId()` | なし（`tax_rule_id`列は残る） |
+| `Product::isEnable()` / `ProductClass::isEnable()` | なし |
+| `Cart::getLock()` / `setLock()` | なし |
+| `transChoice()` | `trans()` |
+| `Order::getTotalPrice()` | `Order::getPaymentTotal()` |
+| `CacheUtil::clear()` | `CacheUtil::clearCache()` |
+| `CustomerStatus::NONACTIVE` / `ACTIVE` | `CustomerStatus::PROVISIONAL` / `REGULAR` |
+
+`Order::getTax()` / `setTax()` / `getDiscount()`と`BaseInfo::getPhpPath()` / `setPhpPath()`は`@deprecated`のまま残っています。
+
+### 未発火のイベント定数の削除
+
+`EccubeEvents`から、dispatch されていなかった 52 個の定数が削除されました。これらを購読していても元々呼び出されていなかったため実挙動は変わりませんが、定数名を参照しているコードは`undefined constant`エラーになります。
+
+```
+ADMIN_ADMIM_INDEX_INITIALIZE
+ADMIN_CONTENT_LAYOUT_INDEX_INITIALIZE
+ADMIN_CONTENT_LAYOUT_INDEX_COMPLETE
+ADMIN_ORDER_MAIL_INDEX_CONFIRM
+ADMIN_ORDER_MAIL_MAIL_ALL_INITIALIZE
+ADMIN_ORDER_MAIL_MAIL_ALL_CHANGE
+ADMIN_ORDER_MAIL_MAIL_ALL_CONFIRM
+ADMIN_ORDER_MAIL_MAIL_ALL_COMPLETE
+ADMIN_ORDER_DELETE_COMPLETE
+ADMIN_ORDER_CSV_EXPORT_SHIPPING
+ADMIN_SHIPPING_INDEX_INITIALIZE
+ADMIN_SHIPPING_INDEX_SEARCH
+ADMIN_PRODUCT_PRODUCT_CLASS_INDEX_INITIALIZE
+ADMIN_PRODUCT_PRODUCT_CLASS_INDEX_CLASSES
+ADMIN_PRODUCT_PRODUCT_CLASS_EDIT_INITIALIZE
+ADMIN_PRODUCT_PRODUCT_CLASS_EDIT_COMPLETE
+ADMIN_PRODUCT_PRODUCT_CLASS_EDIT_UPDATE
+ADMIN_PRODUCT_PRODUCT_CLASS_EDIT_DELETE
+ADMIN_PRODUCT_DISPLAY_COMPLETE
+ADMIN_SETTING_SHOP_TAX_RULE_EDIT_PARAMETER_INITIALIZE
+ADMIN_SETTING_SHOP_TAX_RULE_EDIT_PARAMETER_COMPLETE
+ADMIN_SETTING_SYSTEM_MEMBER_DELETE_INITIALIZE
+FRONT_MYPAGE_MYPAGE_DELETE_INITIALIZE
+FRONT_CART_INDEX_INITIALIZE
+FRONT_CART_INDEX_COMPLETE
+FRONT_CART_ADD_INITIALIZE
+FRONT_CART_ADD_COMPLETE
+FRONT_CART_ADD_EXCEPTION
+FRONT_CART_UP_INITIALIZE
+FRONT_CART_UP_COMPLETE
+FRONT_CART_UP_EXCEPTION
+FRONT_CART_DOWN_INITIALIZE
+FRONT_CART_DOWN_COMPLETE
+FRONT_CART_DOWN_EXCEPTION
+FRONT_CART_REMOVE_INITIALIZE
+FRONT_CART_REMOVE_COMPLETE
+FRONT_PRODUCT_INDEX_COMPLETE
+FRONT_PRODUCT_INDEX_DISP
+FRONT_PRODUCT_INDEX_ORDER
+FRONT_PRODUCT_DETAIL_FAVORITE
+FRONT_PRODUCT_DETAIL_COMPLETE
+FRONT_SHOPPING_INDEX_INITIALIZE
+FRONT_SHOPPING_CONFIRM_INITIALIZE
+FRONT_SHOPPING_CONFIRM_PROCESSING
+FRONT_SHOPPING_CONFIRM_COMPLETE
+FRONT_SHOPPING_DELIVERY_INITIALIZE
+FRONT_SHOPPING_DELIVERY_COMPLETE
+FRONT_SHOPPING_PAYMENT_INITIALIZE
+FRONT_SHOPPING_PAYMENT_COMPLETE
+FRONT_SHOPPING_SHIPPING_CHANGE_INITIALIZE
+FRONT_SHOPPING_SHIPPING_EDIT_CHANGE_INITIALIZE
+FRONT_SHOPPING_SHIPPING_MULTIPLE_CHANGE_INITIALIZE
 ```
 
 ---
@@ -946,150 +667,67 @@ foreach ($attributes as $attribute) {
 
 ### Rectorによる自動修正
 
-EC-CUBE 4.4では、Rectorを使用してコードの自動修正が可能です。`rector.php`を使用して以下の修正を一括適用できます：
+`rector.php`を使用して、ここまでの修正の多くを一括適用できます。
 
 ```bash
-# Rectorの実行（ドライラン）
-vendor/bin/rector process --dry-run
-
-# Rectorの実行（実際に修正）
-vendor/bin/rector process
+vendor/bin/rector process --dry-run  # 変更内容の確認
+vendor/bin/rector process            # 修正の適用
 ```
 
-適用されるルールセット：
-- `SymfonySetList::SYMFONY_74`
-- `DoctrineSetList::ANNOTATIONS_TO_ATTRIBUTES`
-- `DoctrineSetList::DOCTRINE_DBAL_30`
-- `DoctrineSetList::DOCTRINE_CODE_QUALITY`
+本体の`rector.php`（Rector 2.x）で適用される主なルールセットです。
 
-#### ⚠️ Rector適用後の重要な確認事項：DIバインディングとパラメータ名の不一致
+- `LevelSetList::UP_TO_PHP_84`
+- `SymfonySetList::COMPOSER_BASED`、`SYMFONY_CODE_QUALITY`、`SYMFONY_CONSTRUCTOR_INJECTION`
+- `DoctrineSetList::COMPOSER_BASED`、`DOCTRINE_CODE_QUALITY`、`ANNOTATIONS_TO_ATTRIBUTES`
+- `PHPUnitSetList::COMPOSER_BASED`、`PHPUNIT_CODE_QUALITY`
+- `SetList::DEAD_CODE`
 
-**問題の概要**
+`SYMFONY_74`のようなバージョン別のセット定数は Rector 2.6.2 で撤去されました。`COMPOSER_BASED`は`composer.json`のインストール済みバージョンに合うルールだけを実行します。プラグインに適用する場合は`withPaths()`に`app/Plugin/<PluginCode>`を追加してください。
 
-**Rectorルール**: `ClassPropertyAssignToConstructorPromotionRector`
+#### Rector適用後のDIバインディングの確認
 
-このRectorルールがコンストラクタプロモーションを適用する際、**パラメータ名が元のプロパティ名に変更される副作用**があります。
-`services.yaml`の`bind:`設定とパラメータ名が一致しない場合、**正しいサービスが注入されず、実行時エラーが発生します**。
+`ClassPropertyAssignToConstructorPromotionRector`はコンストラクタプロモーションを適用する際、パラメータ名を元のプロパティ名に変更します。`services.yaml`の`bind:`に`$shoppingPurchaseFlow: '@eccube.purchase.flow.shopping'`のようにパラメータ名で束縛しているサービスは、名前が変わるとバインディングが一致せず、正しいPurchaseFlowが注入されません。購入フロー関連のテストが失敗する、`OrderUpdateProcessor`が実行されずOrderStatusが更新されない、といった症状になります。
 
-**具体的な問題**
-
-**Before（Rector適用前）:**
 ```php
-class Cash implements PaymentMethodInterface
+// Rector適用前
+public function __construct(PurchaseFlow $shoppingPurchaseFlow)
 {
-    private $purchaseFlow;
+    $this->purchaseFlow = $shoppingPurchaseFlow;
+}
 
-    public function __construct(PurchaseFlow $shoppingPurchaseFlow)
-    {
-        $this->purchaseFlow = $shoppingPurchaseFlow;
-    }
+// Rector適用後（パラメータ名が $purchaseFlow に変わり、bind: と一致しない）
+public function __construct(private readonly PurchaseFlow $purchaseFlow)
+{
+}
+
+// 修正後（パラメータ名を bind: に合わせる）
+public function __construct(private readonly PurchaseFlow $shoppingPurchaseFlow)
+{
 }
 ```
 
-**Rector適用後（ClassPropertyAssignToConstructorPromotionRectorによる副作用）:**
-```php
-class Cash implements PaymentMethodInterface
-{
-    // ❌ パラメータ名がプロパティ名 $purchaseFlow に変更されてしまう
-    public function __construct(private readonly PurchaseFlow $purchaseFlow)
-    {
-    }
-}
-```
-
-**問題点:**
-- `services.yaml`には `$shoppingPurchaseFlow: '@eccube.purchase.flow.shopping'` と定義されている
-- パラメータ名が `$purchaseFlow` に変更されたため、DIバインディングがマッチしない
-- 結果として、正しいPurchaseFlowが注入されず、`OrderUpdateProcessor`などが実行されない
-
-**正しい修正後:**
-```php
-class Cash implements PaymentMethodInterface
-{
-    // ✅ パラメータ名を $shoppingPurchaseFlow に戻し、プロパティ名も統一
-    public function __construct(private readonly PurchaseFlow $shoppingPurchaseFlow)
-    {
-    }
-}
-```
-
-#### 影響を受ける可能性のあるパラメータ名
-
-以下のような特殊な命名規則のパラメータは、Rector適用後に必ず確認してください：
-
-- `$shoppingPurchaseFlow` - ショッピングフロー用PurchaseFlow
-- `$cartPurchaseFlow` - カートフロー用PurchaseFlow
-- `$orderPurchaseFlow` - 注文フロー用PurchaseFlow
-- `$_orderStateMachine` - 注文ステートマシン（アンダースコア始まり）
-- その他、`services.yaml`の`bind:`セクションで定義されている特殊な命名のパラメータ
-
-#### チェック方法
-
-Rector適用後、以下を確認してください：
+`$shoppingPurchaseFlow`、`$cartPurchaseFlow`、`$orderPurchaseFlow`、`$_orderStateMachine`など、`bind:`で定義されているパラメータ名を持つクラスはRector適用後に確認してください。
 
 ```bash
-# 1. services.yamlのbind設定を確認
 grep -A 10 "bind:" app/config/eccube/services.yaml
-
-# 2. コンストラクタプロモーションが適用されたクラスのパラメータ名を確認
 git diff --name-only | xargs grep "private readonly"
 ```
 
 ### Symfonyバリデーションメッセージの翻訳変更
 
-Symfony 7.4では、Validatorコンポーネントの日本語翻訳メッセージが改善されました。この変更により、テストで期待値として使用しているバリデーションメッセージを更新する必要があります。
-
-#### 影響を受ける主な変更
-
-**1. Length制約（文字数制限）**
-
-最も一般的な影響を受ける変更です。
-
-```php
-// Before (Symfony 6.4以前)
-'この値は、255文字以内で入力してください。'
-'この値は、30文字以上で入力してください。'
-
-// After (Symfony 7.4以降)
-'長すぎます。この値は255文字以下で入力してください。'
-'短すぎます。この値は30文字以上で入力してください。'
-```
-
-**2. その他の主な変更**
+Symfony 7.4では、Validatorコンポーネントの日本語翻訳メッセージが変わりました。テストで期待値として使用しているメッセージを更新してください。
 
 | 制約 | 旧メッセージ | 新メッセージ |
 |------|------------|------------|
+| Length（max） | `この値は、{{ limit }}文字以内で入力してください。` | `長すぎます。この値は{{ limit }}文字以下で入力してください。` |
+| Length（min） | `この値は、{{ limit }}文字以上で入力してください。` | `短すぎます。この値は{{ limit }}文字以上で入力してください。` |
 | NotBlank | `入力してください。` | `この値は空にできません。` |
 | NotNull | `入力してください。` | `値を入力してください。` |
 | Email | `無効なメールアドレスです。` | `有効なメールアドレスではありません。` |
 | Url | `無効なURLです。` | `有効なURLではありません。` |
 | Type | `{{ type }}型でなければなりません。` | `この値は{{ type }}型でなければなりません。` |
 
-#### テストの修正例
-
-**Before (Symfony 6.4以前):**
-```php
-public static function dataDownloadMaxLengthProvider(): \Iterator
-{
-    yield ['order_pdf[title]', 'この値は、255文字以内で入力してください。'];
-    yield ['order_pdf[message1]', 'この値は、30文字以内で入力してください。'];
-}
-```
-
-**After (Symfony 7.4以降):**
-```php
-public static function dataDownloadMaxLengthProvider(): \Iterator
-{
-    yield ['order_pdf[title]', '長すぎます。この値は255文字以下で入力してください。'];
-    yield ['order_pdf[message1]', '長すぎます。この値は30文字以下で入力してください。'];
-}
-```
-
-#### 従来のメッセージを使用したい場合
-
-プロジェクトの方針として従来のメッセージを維持したい場合、または独自のメッセージを使用したい場合は、`src/Eccube/Resource/locale/validators.ja.yaml` でSymfonyの翻訳を上書きできます。
-
-**validators.ja.yaml での上書き例：**
+従来のメッセージを維持したい場合は、`src/Eccube/Resource/locale/validators.ja.yaml`でSymfonyの翻訳を上書きできます。
 
 ```yaml
 # Symfony 7.4の新しいメッセージを従来の形式に戻す
@@ -1099,32 +737,71 @@ This value is not a valid email address.: 無効なメールアドレスです�
 This value is not a valid URL.: 無効なURLです。
 ```
 
-### 依存パッケージのバージョン
+### パスワードポリシーの変更
 
-主要な依存パッケージのバージョン変更：
+パスワード要件が NIST SP 800-63B-4 に沿って変更されました。テストで会員や管理者を作成しているプラグインは、固定のパスワード文字列を 15 文字以上に見直してください。
+
+| 設定 | 4.3 | 4.4 |
+|------|-----|-----|
+| `eccube_password_min_len` | 12 | 15 |
+| `eccube_password_max_len` | 50 | 128 |
+| `eccube_password_pattern` | 英字と数字を各 1 種類以上 | 制御文字以外の全 Unicode 文字を許可 |
+| `eccube_password_compromised_check` | なし | `true`（漏洩パスワードチェック。閉域網では`false`にする） |
+| `eccube_default_password` | `abc********123` | `abc*********123`（15 文字） |
+
+### キャッシュディレクトリの分離
+
+`var/cache`に集約されていた生成物が、用途ごとに 3 つのディレクトリに分かれました。キャッシュ削除のスクリプトや、`%kernel.cache_dir%`配下に一時ファイルを置いているプラグインは確認してください。
+
+| ディレクトリ | 用途 |
+|-------------|------|
+| `var/cache/<env>` | `kernel.cache_dir` |
+| `var/build/<env>` | `kernel.build_dir`。コンパイル済みコンテナ・ルーティング・メタデータ・prod の twig。`bin/console eccube:cache:build`が生成 |
+| `var/runtime/<env>` | リクエスト処理中に Web サーバーが書き込むもの（cache pool、CSV 一時ファイル等）。`%eccube_runtime_dir%` |
+
+設定ファイルを変更した後は`var/cache`と`var/build`の両方を削除してください。
+
+### 依存パッケージのバージョン
 
 | パッケージ | 4.3 | 4.4 |
 |-----------|-----|-----|
+| PHP | 8.1〜8.3 | 8.2〜8.5 |
 | Symfony | 6.4.x | 7.4.x |
 | Doctrine ORM | 2.x | 3.x |
-| Doctrine DBAL | 3.x | 3.8+ |
-| PHP | 8.1〜8.3 | 8.2〜8.5 |
-| Twig | 3.x | 3.21+ |
-| php-cs-fixer | 3.x | 3.75+ |
+| Doctrine DBAL | 3.x | 4.x |
+| Doctrine Persistence | 3.x | 4.x |
+| Twig | 3.8 | 3.21+ |
 | Monolog | 2.x | 3.x |
-| PHPUnit | 9.5 | 11.0+ |
+| symfony/monolog-bundle | 3.x | 4.x |
+| psr/log | 2.x | 3.x |
+| mobiledetect/mobiledetectlib | 2.x | 4.x |
+| nanasess/bcmath-polyfill | 1.0+ | 1.2+ |
+| PHPUnit | 9.x | 11.x |
+| symfony/phpunit-bridge | 7.x | 8.x |
+| dama/doctrine-test-bundle | 6.x | 8.x |
+| Rector | 1.x | 2.x |
+| PHPStan | 1.x | 2.x |
+| php-cs-fixer | 3.x | 3.75+ |
+
+4.4 で依存から外れたパッケージです。プラグインが直接参照している場合は置き換えてください。
+
+| パッケージ | 代替 |
+|-----------|------|
+| `doctrine/annotations` | PHP 8 Attributes |
+| `doctrine/common` | `ClassUtils`は`EntityManager::getClassMetadata()`で代替 |
+| `sensio/framework-extra-bundle` | `#[Template]`、`#[IsGranted]`等の Symfony 本体の属性 |
+| `codeception/codeception` | E2E テストは Playwright（`e2e/`）へ移行 |
 
 ---
 
 ## プラグイン開発者向け移行ガイド
 
+`Eccube\Annotation\*`は`Eccube\Attribute\*`に置き換わりました（`Class "Eccube\Annotation\EntityExtension" not found`になります）。各例では4.3から変わる行だけを示します。
+
 ### 1. EntityExtensionの移行
 
-**Before (4.3):**
 ```php
-<?php
-namespace Plugin\YourPlugin\Entity;
-use Doctrine\ORM\Mapping as ORM;
+// 4.3までの書き方
 use Eccube\Annotation\EntityExtension;
 
 /**
@@ -1145,24 +822,9 @@ trait CustomerSortNoTrait
     {
         return $this->sort_no;
     }
-
-    /**
-     * @param int|null $sort_no
-     * @return $this
-     */
-    public function setSortNo($sort_no = null)
-    {
-        $this->sort_no = $sort_no;
-        return $this;
-    }
 }
-```
 
-**After (4.4):**
-```php
-<?php
-namespace Plugin\YourPlugin\Entity;
-use Doctrine\ORM\Mapping as ORM;
+// 4.4での書き方
 use Eccube\Attribute\EntityExtension;
 
 #[EntityExtension(\Eccube\Entity\Customer::class)]
@@ -1175,27 +837,16 @@ trait CustomerSortNoTrait
     {
         return $this->sort_no;
     }
-
-    public function setSortNo(?int $sort_no = null): self
-    {
-        $this->sort_no = $sort_no;
-        return $this;
-    }
 }
 ```
 
 ### 2. PurchaseFlowプロセッサーの移行
 
-**Before (4.3):**
 ```php
-<?php
-namespace Plugin\YourPlugin\Service\PurchaseFlow\Processor;
+// 4.3までの書き方
 use Eccube\Annotation\CartFlow;
 use Eccube\Annotation\OrderFlow;
 use Eccube\Annotation\ShoppingFlow;
-use Eccube\Service\PurchaseFlow\ItemValidator;
-use Eccube\Service\PurchaseFlow\ItemInterface;
-use Eccube\Service\PurchaseFlow\PurchaseContext;
 
 /**
  * @CartFlow()
@@ -1206,21 +857,14 @@ class YourValidator extends ItemValidator
 {
     protected function validate(ItemInterface $item, PurchaseContext $context)
     {
-        // バリデーションロジック
+        // ...
     }
 }
-```
 
-**After (4.4):**
-```php
-<?php
-namespace Plugin\YourPlugin\Service\PurchaseFlow\Processor;
+// 4.4での書き方
 use Eccube\Attribute\CartFlow;
 use Eccube\Attribute\OrderFlow;
 use Eccube\Attribute\ShoppingFlow;
-use Eccube\Service\PurchaseFlow\ItemValidator;
-use Eccube\Service\PurchaseFlow\ItemInterface;
-use Eccube\Service\PurchaseFlow\PurchaseContext;
 
 #[CartFlow]
 #[ShoppingFlow]
@@ -1229,71 +873,38 @@ class YourValidator extends ItemValidator
 {
     protected function validate(ItemInterface $item, PurchaseContext $context): void
     {
-        // バリデーションロジック
+        // ...
     }
 }
 ```
 
 ### 3. コントローラーの移行
 
-**Before (4.3):**
 ```php
-<?php
-namespace Plugin\YourPlugin\Controller;
-use Eccube\Controller\AbstractController;
+// 4.3までの書き方
 use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
 
-class YourPluginController extends AbstractController
-{
     /**
      * @Route("/your_plugin/index", name="your_plugin_index")
      * @Template("YourPlugin/index.twig")
      */
     public function index(Request $request)
-    {
-        $data = $this->getData();
-        return [
-            'data' => $data,
-        ];
-    }
-}
-```
 
-**After (4.4):**
-```php
-<?php
-namespace Plugin\YourPlugin\Controller;
-use Eccube\Controller\AbstractController;
+// 4.4での書き方
 use Symfony\Bridge\Twig\Attribute\Template;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Attribute\Route;
 
-class YourPluginController extends AbstractController
-{
     #[Route('/your_plugin/index', name: 'your_plugin_index')]
     #[Template('YourPlugin/index.twig')]
     public function index(Request $request): array
-    {
-        $data = $this->getData();
-        return [
-            'data' => $data,
-        ];
-    }
-}
 ```
 
 ### 4. FormExtensionの移行
 
-**Before (4.3):**
 ```php
-<?php
-namespace Plugin\YourPlugin\Form\Extension;
+// 4.3までの書き方
 use Eccube\Annotation\FormAppend;
-use Symfony\Component\Form\AbstractTypeExtension;
-use Symfony\Component\Form\Extension\Core\Type\TextType;
-use Symfony\Component\Form\FormBuilderInterface;
 
 /**
  * @FormAppend()
@@ -1302,10 +913,7 @@ class EntryTypeExtension extends AbstractTypeExtension
 {
     public function buildForm(FormBuilderInterface $builder, array $options)
     {
-        $builder->add('custom_field', TextType::class, [
-            'label' => 'カスタムフィールド',
-            'required' => false,
-        ]);
+        // ...
     }
 
     public function getExtendedType()
@@ -1313,26 +921,16 @@ class EntryTypeExtension extends AbstractTypeExtension
         return \Eccube\Form\Type\Front\EntryType::class;
     }
 }
-```
 
-**After (4.4):**
-```php
-<?php
-namespace Plugin\YourPlugin\Form\Extension;
+// 4.4での書き方
 use Eccube\Attribute\FormAppend;
-use Symfony\Component\Form\AbstractTypeExtension;
-use Symfony\Component\Form\Extension\Core\Type\TextType;
-use Symfony\Component\Form\FormBuilderInterface;
 
 #[FormAppend]
 class EntryTypeExtension extends AbstractTypeExtension
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('custom_field', TextType::class, [
-            'label' => 'カスタムフィールド',
-            'required' => false,
-        ]);
+        // ...
     }
 
     public static function getExtendedTypes(): iterable
@@ -1344,225 +942,37 @@ class EntryTypeExtension extends AbstractTypeExtension
 
 ### 5. PluginManagerの移行
 
-**Before (4.3):**
+`AbstractPluginManager`の`install()`、`update()`、`enable()`、`disable()`、`uninstall()`、`migration()`は`: void`戻り値型を持ちます。オーバーライドしているメソッドに`: void`を付けないと`Declaration of ... must be compatible with Eccube\Plugin\AbstractPluginManager::install(): void`エラーになります。
+
 ```php
-<?php
-namespace Plugin\YourPlugin;
-use Eccube\Plugin\AbstractPluginManager;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+// 4.3までの書き方
+public function install(array $meta, ContainerInterface $container)
 
-class PluginManager extends AbstractPluginManager
-{
-    public function install(array $meta, ContainerInterface $container)
-    {
-        // インストール処理
-    }
-
-    public function enable(array $meta, ContainerInterface $container)
-    {
-        // 有効化処理
-    }
-}
+// 4.4での書き方
+public function install(array $meta, ContainerInterface $container): void
 ```
 
-**After (4.4):**
-```php
-<?php
-namespace Plugin\YourPlugin;
-use Eccube\Plugin\AbstractPluginManager;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+### 6. Symfony 7で削除されたAPIの置き換え
 
-class PluginManager extends AbstractPluginManager
-{
-    public function install(array $meta, ContainerInterface $container): void
-    {
-        // インストール処理
-    }
+公式プラグインの 4.4 対応で実際に必要になった置き換えです。
 
-    public function update(array $meta, ContainerInterface $container): void
-    {
-        // アップデート処理
-    }
-
-    public function enable(array $meta, ContainerInterface $container): void
-    {
-        // 有効化処理
-    }
-
-    public function disable(array $meta, ContainerInterface $container): void
-    {
-        // 無効化処理
-    }
-
-    public function uninstall(array $meta, ContainerInterface $container): void
-    {
-        // アンインストール処理
-    }
-}
-```
+| 4.3までの書き方 | 4.4での書き方 |
+|----------------|--------------|
+| `UserProviderInterface::loadUserByUsername()` | `loadUserByIdentifier()` |
+| Command の `protected static $defaultName = '...'` | `#[AsCommand(name: '...')]`（`Symfony\Component\Console\Attribute\AsCommand`） |
+| `@required`（PHPDoc） | `#[Required]`（`Symfony\Contracts\Service\Attribute\Required`） |
+| `@IsGranted(...)`（Sensio） | `#[IsGranted(...)]`（`Symfony\Component\Security\Http\Attribute\IsGranted`） |
+| `@Template(...)`（Sensio） | `#[Template(...)]`（`Symfony\Bridge\Twig\Attribute\Template`） |
+| `security.enable_authenticator_manager: true` | 設定を削除 |
+| `AssociationMapping`を配列として`$mapping['type']`で判定 | `$mapping->isToMany()`等のメソッドで判定 |
 
 ---
 
 ## トラブルシューティング
 
-### よくあるエラーと解決方法
+### HTTP環境でログインできない
 
-#### 1. アノテーションクラスが見つからないエラー
-
-**エラー:**
-```
-Class "Eccube\Annotation\EntityExtension" not found
-```
-
-**解決方法:**
-`use`文を`Eccube\Annotation\*`から`Eccube\Attribute\*`に変更してください。
-
-```php
-// Before
-use Eccube\Annotation\EntityExtension;
-
-// After
-use Eccube\Attribute\EntityExtension;
-```
-
-#### 2. SensioFrameworkExtraBundleが見つからないエラー
-
-**エラー:**
-```
-Class "Sensio\Bundle\FrameworkExtraBundle\Configuration\Template" not found
-```
-
-**解決方法:**
-`use`文を以下のように変更してください。
-
-```php
-// Before
-use Sensio\Bundle\FrameworkExtraBundle\Configuration\Template;
-
-// After
-use Symfony\Bridge\Twig\Attribute\Template;
-```
-
-#### 3. Proxyクラスが見つからないエラー
-
-**エラー:**
-```
-Class "Doctrine\ORM\Proxy\Proxy" not found
-```
-
-**解決方法:**
-`use`文を以下のように変更してください。
-
-```php
-// Before
-use Doctrine\ORM\Proxy\Proxy;
-
-// After
-use Doctrine\Persistence\Proxy;
-```
-
-#### 4. PHPUnitの`convertDeprecationsToExceptions`エラー
-
-**エラー:**
-```
-Unknown or risky test attribute "convertDeprecationsToExceptions"
-```
-
-**解決方法:**
-`phpunit.xml`または`phpunit.xml.dist`から`convertDeprecationsToExceptions`属性を削除してください。
-
-#### 5. データプロバイダーの静的メソッドエラー
-
-**エラー:**
-```
-Data Provider method must be static
-```
-
-**解決方法:**
-データプロバイダーメソッドに`static`キーワードを追加してください。
-
-```php
-// Before
-public function dataProvider()
-{
-    return [[1, 2]];
-}
-
-// After
-public static function dataProvider(): array
-{
-    return [[1, 2]];
-}
-```
-
-#### 6. AbstractPluginManagerのメソッド戻り値型エラー
-
-**エラー:**
-```
-Declaration of Plugin\YourPlugin\PluginManager::install() must be compatible with Eccube\Plugin\AbstractPluginManager::install(): void
-```
-
-**解決方法:**
-PluginManagerのすべてのメソッドに`: void`戻り値型を追加してください。
-
-```php
-public function install(array $meta, ContainerInterface $container): void
-{
-    // ...
-}
-```
-
-#### 7. ECCUBE_AUTH_MAGICが設定されていないエラー
-
-**エラー:**
-```
-Environment variable not found: "ECCUBE_AUTH_MAGIC"
-```
-
-**解決方法:**
-`.env`ファイルに`ECCUBE_AUTH_MAGIC`を追加してください。
-
-```bash
-ECCUBE_AUTH_MAGIC=$(openssl rand -hex 32)
-```
-
-#### 8. Monolog ProcessorのLogRecordエラー
-
-**エラー:**
-```
-Argument #1 ($record) must be of type Monolog\LogRecord, array given
-```
-
-**解決方法:**
-カスタムMonolog Processorのシグネチャを変更してください。
-
-```php
-// Before
-public function __invoke(array $record): array
-{
-    // ...
-}
-
-// After
-use Monolog\LogRecord;
-
-public function __invoke(LogRecord $record): LogRecord
-{
-    // ...
-}
-```
-
-#### 9. HTTP環境でログインできない
-
-**症状:**
-- Symfony 6.4では `http://localhost:8080` でログインできたが、Symfony 7では失敗する
-- セッションCookieが保存されない
-
-**原因:**
-Symfony 7.0で `cookie_samesite` のデフォルト値が `lax` に変更されました。`cookie_samesite: none` を設定した場合、ブラウザ仕様により **`Secure` フラグが必須** ですが、HTTP環境では `cookie_secure: auto` により Secure フラグが付かないため、ブラウザがCookieを拒否します。
-
-**解決方法:**
-開発環境でHTTPSリバースプロキシを使用するか、開発環境のみ一時的に以下の設定を使用してください：
+Symfony 6.4では`http://localhost:8080`でログインできたのに、Symfony 7ではセッションCookieが保存されず失敗する場合は、「[設定ファイル（YAML）の更新](#設定ファイルyamlの更新)」で説明したセッションCookie設定が原因です。開発環境でHTTPSリバースプロキシを使用するか、開発環境のみ一時的に以下の設定を使用してください。
 
 ```yaml
 # app/config/eccube/packages/dev/framework.yaml
@@ -1572,137 +982,26 @@ framework:
         cookie_samesite: lax
 ```
 
-⚠️ **注意**: 外部決済モジュールをテストする場合は、HTTPS環境を使用してください。`SameSite=Lax` では外部サイトからのPOSTコールバックでセッションが維持されません。
+インストール後に変更した場合は、`var/cache`と`var/build`を削除してください。
 
-#### 10. DIバインディングとパラメータ名の不一致エラー
-
-**症状:**
-- テストが失敗する（特に購入フロー関連）
-- 特定の処理が実行されない（例: OrderUpdateProcessorが実行されない）
-- OrderStatusが更新されない
-
-**原因:**
-`ClassPropertyAssignToConstructorPromotionRector`適用時にパラメータ名がプロパティ名に変更され、`services.yaml`の`bind:`設定とマッチしなくなった。
-
-**解決方法:**
-コンストラクタパラメータ名を`services.yaml`の`bind:`設定に合わせて修正してください。
-
-```php
-// 問題のあるコード（Rector適用後）
-public function __construct(private readonly PurchaseFlow $purchaseFlow)
-{
-}
-
-// 修正後
-public function __construct(private readonly PurchaseFlow $shoppingPurchaseFlow)
-{
-}
-```
-
-**確認コマンド:**
-```bash
-# services.yamlのbind設定を確認
-grep -A 10 "bind:" app/config/eccube/services.yaml
-
-# コンストラクタプロモーションが適用されたクラスを確認
-git diff --name-only | xargs grep "private readonly"
-```
+外部決済モジュールをテストする場合はHTTPS環境を使用してください。`SameSite=Lax`では外部サイトからのPOSTコールバックでセッションが維持されません。
 
 ---
 
 ## 移行チェックリスト
 
-プラグインまたはカスタマイズコードのアップグレード時に、以下の項目を確認してください。
-
-### 基本チェック
-
-- [ ] PHP 8.2以降を使用している
-- [ ] composer.jsonの依存関係をEC-CUBE 4.4対応版に合わせて更新した
-- [ ] `composer install`を実行し、すべての依存関係を更新した
-- [ ] `.env`ファイルに`ECCUBE_AUTH_MAGIC`を設定した
-
-### 設定ファイルの更新
-
-- [ ] `app/config/eccube/packages/framework.yaml`を更新した
-    - [ ] `handle_all_throwables: true`を追加
-    - [ ] `session.cookie_secure: auto`に変更
-    - [ ] `validation.enable_attributes: true`を追加
-    - [ ] `enable_annotations`を削除
-- [ ] `app/config/eccube/packages/doctrine.yaml`を更新した
-    - [ ] `controller_resolver.auto_mapping: false`を追加
-- [ ] `app/config/eccube/packages/test/doctrine.yaml`を更新した
-    - [ ] `use_savepoints: true`を追加
-- [ ] `app/config/eccube/packages/security.yaml`を更新した
-    - [ ] `enable_authenticator_manager`を削除
-- [ ] `phpunit.xml.dist`を更新した
-    - [ ] `convertDeprecationsToExceptions`属性を削除
-    - [ ] `<listeners>`を`<extensions>`に変更
-
-### Rectorによる自動修正
-
-- [ ] `rector.php`を設定した
-- [ ] `vendor/bin/rector process --dry-run`で変更内容を確認した
-- [ ] `vendor/bin/rector process`で自動修正を適用した
-- [ ] 変更内容をレビューし、問題がないことを確認した
-- [ ] **⚠️ 重要**: コンストラクタプロモーション適用後、DIバインディングとパラメータ名の一致を確認した
-    - [ ] `services.yaml`の`bind:`設定を確認
-    - [ ] コンストラクタプロモーションが適用されたクラスのパラメータ名を確認
-    - [ ] 特に`$shoppingPurchaseFlow`、`$cartPurchaseFlow`、`$orderPurchaseFlow`等の特殊な命名が正しいか確認
-    - [ ] 不一致があれば手動で修正
-
-### アノテーション→属性の移行
-
-- [ ] すべての`use Eccube\Annotation\*`を`use Eccube\Attribute\*`に変更した
-- [ ] すべての`@EntityExtension`を`#[EntityExtension(...)]`に変更した
-- [ ] すべての`@CartFlow`、`@ShoppingFlow`、`@OrderFlow`を属性に変更した
-- [ ] すべての`@FormAppend`を`#[FormAppend]`に変更した
-- [ ] すべての`@Route`を`#[Route(...)]`に変更した
-- [ ] すべての`@Template`を`#[Template(...)]`に変更した
-- [ ] DoctrineのTable属性のindexes/uniqueConstraintsを分離した
-
-### Doctrine関連
-
-- [ ] `Doctrine\ORM\Proxy\Proxy`を`Doctrine\Persistence\Proxy`に変更した
-- [ ] EventSubscriberをListenerに移行した（該当する場合）
-- [ ] エンティティの属性定義を確認した
-- [ ] `Platform::getName()`を`instanceof`チェックに変更した
-
-### AbstractPluginManager
-
-- [ ] すべてのメソッドに`: void`戻り値型を追加した
-- [ ] `install()`, `update()`, `enable()`, `disable()`, `uninstall()`, `migration()`のシグネチャを確認した
-
-### 削除されたクラス/サービス
-
-- [ ] `SameSiteNoneCompatSessionHandler`への参照を削除した
-- [ ] `AnnotationReaderFacade`への参照を削除した
-- [ ] `sensio/framework-extra-bundle`への依存を削除した
-
-### テスト
-
-- [ ] データプロバイダーを静的メソッドに変更した
-- [ ] すべてのテストメソッドに戻り値型`: void`を追加した（該当する場合）
-- [ ] バリデーションメッセージの期待値を更新した
-- [ ] テストが正常に実行されることを確認した
-
-### Monolog（カスタムProcessorがある場合）
-
-- [ ] カスタムProcessorのシグネチャを`LogRecord`型に変更した
-
-### BCMath
-
-- [ ] 金額計算を行っている場合、BCMath関数の使用を検討した
-- [ ] 計算精度が要件を満たしていることを確認した
-
-### 動作確認
-
-- [ ] プラグインのインストール/アンインストールが正常に動作する
-- [ ] プラグインの有効化/無効化が正常に動作する
-- [ ] エンティティ拡張が正しく機能している
-- [ ] フォーム拡張が正しく機能している
-- [ ] コントローラーのルーティングが正常に動作する
-- [ ] PurchaseFlowプロセッサーが正常に動作する
-- [ ] 管理画面/フロント画面で期待通りに動作する
+- [ ] PHP 8.2以降を使用し、`composer.json`の依存関係を4.4対応版に更新した
+- [ ] `.env`に`ECCUBE_AUTH_MAGIC`を設定した
+- [ ] framework.yaml / doctrine.yaml / test/doctrine.yaml / security.yaml / phpunit.xml.dist を更新した
+- [ ] Rectorを適用し、コンストラクタプロモーション後のパラメータ名が`services.yaml`の`bind:`と一致することを確認した
+- [ ] `Eccube\Annotation\*`、`@Route`、`@Template`、`@ORM\*`をすべてAttributesに移行し、`indexes` / `uniqueConstraints`を分離した
+- [ ] EntityManager / ClassMetadata / DBAL の削除APIと`Doctrine\ORM\Proxy\Proxy`を置き換え、EventSubscriberをListenerに移行した
+- [ ] `pc.stock`の参照と`new ProductStock()`による差し替えを修正し、アップデート後に`doctrine:migrations:migrate`を実行した
+- [ ] `AbstractPluginManager`のメソッドに`: void`を付けた
+- [ ] 削除されたクラス・非推奨 public API・`EccubeEvents`定数・Symfony 7で削除されたAPIを参照していない
+- [ ] カスタムMonolog Processorを`LogRecord`に対応させた
+- [ ] テストのデータプロバイダーを`static`にし、バリデーションメッセージの期待値と固定パスワード（15文字以上）を更新した
+- [ ] プラグインのインストール/有効化/無効化/アンインストール、Entity拡張、Form拡張、ルーティング、PurchaseFlowプロセッサーが管理画面/フロント画面で動作する
 
 ---
 
@@ -1712,6 +1011,7 @@ git diff --name-only | xargs grep "private readonly"
 
 - [Symfony 7.0 Upgrade Guide](https://symfony.com/doc/current/setup/upgrade_major.html)
 - [Doctrine ORM 3.0 Upgrade Guide](https://github.com/doctrine/orm/blob/3.0.x/UPGRADE.md)
+- [Doctrine DBAL 4.0 Upgrade Guide](https://github.com/doctrine/dbal/blob/4.0.x/UPGRADE.md)
 - [PHPUnit 11.0 Release Announcement](https://phpunit.de/announcements/phpunit-11.html)
 - [PHP 8 Attributes](https://www.php.net/manual/ja/language.attributes.php)
 - [Monolog 3.0 Upgrade Guide](https://github.com/Seldaek/monolog/blob/main/UPGRADE.md)
@@ -1720,5 +1020,12 @@ git diff --name-only | xargs grep "private readonly"
 
 - [EC-CUBE 4系 プラグイン開発](https://doc4.ec-cube.net/plugin)
 - [EC-CUBE GitHub リポジトリ](https://github.com/EC-CUBE/ec-cube)
+- [EC-CUBE 4.4.0-alpha リリースノート](https://github.com/EC-CUBE/ec-cube/releases/tag/4.4.0-alpha-1)
+
+### 4.4対応済みプラグインの実例
+
+- [eccube-api4 #186](https://github.com/EC-CUBE/eccube-api4/pull/186)
+- [ProductReview-plugin #95](https://github.com/EC-CUBE/ProductReview-plugin/pull/95)
+- [mail-magazine-plugin #150](https://github.com/EC-CUBE/mail-magazine-plugin/pull/150)
 
 ---
